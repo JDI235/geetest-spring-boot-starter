@@ -7,37 +7,30 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import com.cl.spring.starter.geetest.properties.GeeTestProperties;
+import com.cl.spring.starter.geetest.properties.GeetestProperties;
 import com.cl.spring.starter.geetest.sdk.GeetestLib;
-import com.cl.spring.starter.geetest.service.GeeTestService;
-import com.cl.spring.starter.geetest.service.impl.GeeTestServiceImpl;
+import com.cl.spring.starter.geetest.service.GeetestService;
+import com.cl.spring.starter.geetest.service.impl.GeetestServiceImpl;
 
 @Configuration
-@EnableConfigurationProperties(GeeTestProperties.class)
-public class GeeTestAutoConfiguration
+@EnableConfigurationProperties(GeetestProperties.class)
+public class GeetestAutoConfiguration
 {
 
-    private GeeTestProperties geeTestProperties;
-
     @Autowired
-    public GeeTestAutoConfiguration(GeeTestProperties geeTestProperties)
-    {
-        this.geeTestProperties = geeTestProperties;
-    }
-
     @Bean
     @ConditionalOnMissingBean(GeetestLib.class)
-    public GeetestLib setGeeTestService()
+    public GeetestLib setGeeTestService(GeetestProperties geetestProperties)
     {
-        return new GeetestLib(geeTestProperties);
+        return new GeetestLib(geetestProperties);
     }
 
     @Autowired
     @Bean
     @ConditionalOnBean(GeetestLib.class)
-    public GeeTestService createGeeTestService(GeetestLib geetestLib)
+    public GeetestService createGeeTestService(GeetestLib geetestLib)
     {
-        return new GeeTestServiceImpl(geetestLib);
+        return new GeetestServiceImpl(geetestLib);
     }
 
 }

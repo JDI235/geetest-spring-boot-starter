@@ -18,21 +18,24 @@ import org.springframework.boot.configurationprocessor.json.JSONObject;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 
-import com.cl.spring.starter.geetest.bean.ValidationData;
-import com.cl.spring.starter.geetest.bean.ValidationResultData;
+import com.cl.spring.starter.geetest.bean.GeetestData;
+import com.cl.spring.starter.geetest.bean.RegisterData;
+import com.cl.spring.starter.geetest.bean.RegisterResultData;
 import com.cl.spring.starter.geetest.consts.GeeTestConst;
-import com.cl.spring.starter.geetest.properties.GeeTestProperties;
+import com.cl.spring.starter.geetest.properties.GeetestProperties;
 
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 
+@Slf4j
 public class GeetestLib
 {
 
-    private GeeTestProperties geeTestProperties;
+    private GeetestProperties geeTestProperties;
 
     private OkHttpClient okHttpClient;
 
-    public GeetestLib(GeeTestProperties geeTestProperties)
+    public GeetestLib(GeetestProperties geeTestProperties)
     {
         this.geeTestProperties = geeTestProperties;
         this.okHttpClient = new OkHttpClient.Builder()
@@ -51,35 +54,34 @@ public class GeetestLib
     /**
      * 验证初始化预处理
      *
-     * @param validationData
+     * @param registerData
      * @return
      */
-    public ValidationResultData preProcess(ValidationData validationData)
+    public RegisterResultData preProcess(RegisterData registerData)
     {
-        ValidationResultData validationResultData = registerChallenge(validationData);
+        RegisterResultData validationResultData = registerChallenge(registerData);
+        validationResultData.setRegisterData(registerData);
         if (!validationResultData.isSuccess())
         {
-            validationResultData.setJsonStr(this.getFailPreProcessRes());
+            validationResultData.setGeetestData(GeetestData.formJson(this.getFailPreProcessRes()));
         }
-
         return validationResultData;
     }
 
     /**
      * 服务正常的情况下使用的验证方式,向gt-server进行、“”二次验证,获取验证结果
      *
-     * @param challenge
-     * @param validate
-     * @param seccode
+     * @param geetestData
      * @param validationData
      * @return
+     * @throws UnsupportedEncodingException
      */
-    public boolean enhencedValidateRequest(String challenge, String validate, String seccode,
-            ValidationData validationData)
-            throws UnsupportedEncodingException
+    public boolean enhencedValidateRequest(GeetestData geetestData,
+            RegisterData validationData)
     {
 
-        if (!resquestIsLegal(challenge, validate, seccode))
+        if (!resquestIsLegal(geetestData.getChallenge(),
+                geetestData.getValidate(), geetestData.getSeccode()))
         {
 
             return false;
@@ -88,27 +90,10 @@ public class GeetestLib
 
         gtlog("request legitimate");
 
-        String userId = validationData.getUserId();
-        String clientType = validationData.getClientType();
-        String ipAddress = validationData.getIpAddress();
-
-        String postUrl = GeeTestConst.API_URL + GeeTestConst.VALIDATE_URL;
-        String param = String.format(
-                "challenge=%s&validate=%s&seccode=%s&json_format=%s", challenge, validate, seccode,
-                GeeTestConst.JSON_FORMAT);
-
-        if (validationData.getUserId() != null)
-        {
-            param = param + "&user_id=" + URLEncoder.encode(userId, "utf-8");
-        }
-        if (validationData.getClientType() != null)
-        {
-            param = param + "&client_type=" + URLEncoder.encode(clientType, "utf-8");
-        }
-        if (validationData.getIpAddress() != null)
-        {
-            param = param + "&ip_address=" + URLEncoder.encode(ipAddress, "utf-8");
-        }
+        String param = setParamString(validationData, String.format(
+                "challenge=%s&validate=%s&seccode=%s&json_format=%s", geetestData.getChallenge(),
+                geetestData.getValidate(), geetestData.getSeccode(),
+                GeeTestConst.JSON_FORMAT));
 
         gtlog("param:" + param);
 
@@ -116,7 +101,8 @@ public class GeetestLib
         try
         {
 
-            if (validate.length() <= 0 || !checkResultByPrivate(challenge, validate))
+            if (geetestData.getValidate().length() <= 0 || !checkResultByPrivate(geetestData.getChallenge(),
+                    geetestData.getValidate()))
             {
 
                 return false;
@@ -125,7 +111,7 @@ public class GeetestLib
 
             gtlog("checkResultByPrivate");
 
-            response = readContentFromPost(postUrl, param);
+            response = readContentFromPost(GeeTestConst.API_URL + GeeTestConst.VALIDATE_URL, param);
 
             gtlog("response: " + response);
 
@@ -146,7 +132,7 @@ public class GeetestLib
             return_seccode = return_map.getString("seccode");
             gtlog("md5: " + md5Encode(return_seccode));
 
-            if (return_seccode.equals(md5Encode(seccode)))
+            if (return_seccode.equals(md5Encode(geetestData.getSeccode())))
             {
 
                 return true;
@@ -162,10 +148,8 @@ public class GeetestLib
         }
         catch (JSONException e)
         {
-
             gtlog("json load error");
             return false;
-
         }
 
     }
@@ -173,27 +157,25 @@ public class GeetestLib
     /**
      * failback使用的验证方式
      *
-     * @param challenge
-     * @param validate
-     * @param seccode
+     * @param geetestData
      * @return
      */
-    public boolean failbackValidateRequest(String challenge, String validate, String seccode)
+    public boolean failbackValidateRequest(GeetestData geetestData)
     {
         gtlog("in failback validate");
-        boolean flag = resquestIsLegal(challenge, validate, seccode);
+        boolean flag = resquestIsLegal(geetestData.getChallenge(),
+                geetestData.getValidate(), geetestData.getSeccode());
         gtlog("request legitimate");
         return flag;
     }
 
     @CachePut(value = "geetest", key = "validationResultData.userId")
-    public ValidationResultData cacheValidationResultData(ValidationResultData validationResultData)
+    public void cacheValidationResultData(RegisterResultData validationResultData)
     {
-        return validationResultData;
     }
 
     @Cacheable(value = "geetest", key = "#userId")
-    public ValidationResultData findValidationResultData(String userId)
+    public RegisterResultData findValidationResultData(String userId)
     {
         return null;
     }
@@ -334,27 +316,15 @@ public class GeetestLib
      *
      * @return 1表示注册成功，0表示注册失败
      */
-    private ValidationResultData registerChallenge(ValidationData validationData)
+    private RegisterResultData registerChallenge(RegisterData validationData)
     {
-        ValidationResultData validationResultData = ValidationResultData.builder().userId(validationData.getUserId())
+        RegisterResultData validationResultData = RegisterResultData.builder().userId(validationData.getUserId())
                 .build();
         try
         {
             String getUrl = GeeTestConst.API_URL + GeeTestConst.REGISTER_URL + "?";
-            String param = "gt=" + geeTestProperties.getCaptchaId() + "&json_format=" + GeeTestConst.JSON_FORMAT;
-
-            if (validationData.getUserId() != null)
-            {
-                param = param + "&user_id=" + URLEncoder.encode(validationData.getUserId(), "utf-8");
-            }
-            if (validationData.getClientType() != null)
-            {
-                param = param + "&client_type=" + URLEncoder.encode(validationData.getClientType(), "utf-8");
-            }
-            if (validationData.getIpAddress() != null)
-            {
-                param = param + "&ip_address=" + URLEncoder.encode(validationData.getIpAddress(), "utf-8");
-            }
+            String param = setParamString(validationData,
+                    "gt=" + geeTestProperties.getCaptchaId() + "&json_format=" + GeeTestConst.JSON_FORMAT);
 
             gtlog("GET_URL:" + getUrl + param);
             String result_str = readContentFromGet(getUrl + param);
@@ -368,9 +338,9 @@ public class GeetestLib
 
                 if (return_challenge.length() == 32)
                 {
-                    validationResultData.setJsonStr(this
+                    validationResultData.setGeetestData(GeetestData.formJson(this
                             .getSuccessPreProcessRes(
-                                    this.md5Encode(return_challenge + geeTestProperties.getPrivateKey())));
+                                    this.md5Encode(return_challenge + geeTestProperties.getPrivateKey()))));
                     validationResultData.setSuccess(true);
                 }
                 else
@@ -392,6 +362,30 @@ public class GeetestLib
 
         }
         return validationResultData;
+    }
+
+    private String setParamString(RegisterData validationData, String param)
+    {
+        try
+        {
+            if (validationData.getUserId() != null)
+            {
+                param = param + "&user_id=" + URLEncoder.encode(validationData.getUserId(), "utf-8");
+            }
+            if (validationData.getClientType() != null)
+            {
+                param = param + "&client_type=" + URLEncoder.encode(validationData.getClientType(), "utf-8");
+            }
+            if (validationData.getIpAddress() != null)
+            {
+                param = param + "&ip_address=" + URLEncoder.encode(validationData.getIpAddress(), "utf-8");
+            }
+        }
+        catch (UnsupportedEncodingException e)
+        {
+            //log.error("", e);
+        }
+        return param;
     }
 
     /**

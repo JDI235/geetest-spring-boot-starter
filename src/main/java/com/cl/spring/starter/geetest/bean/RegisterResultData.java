@@ -5,12 +5,14 @@ import lombok.Data;
 
 @Data
 @Builder
-public class ValidationResultData
+public class RegisterResultData
 {
 
     private String userId;
 
-    private String jsonStr;
+    private GeetestData geetestData;
+
+    private RegisterData registerData;
 
     private boolean success;
 }

@@ -6,7 +6,7 @@ import lombok.Data;
 
 @Data
 @ConfigurationProperties(prefix = "geetest")
-public class GeeTestProperties
+public class GeetestProperties
 {
     /**
      * 公钥
