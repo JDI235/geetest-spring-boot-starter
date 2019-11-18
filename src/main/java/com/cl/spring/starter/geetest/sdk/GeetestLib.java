@@ -189,8 +189,7 @@ public class GeetestLib
     {
         if (geeTestProperties.isDebugCode())
         {
-
-            //log.info("gtlog: " + message);
+            log.info("gtlog: " + message);
         }
     }
 
